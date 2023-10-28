@@ -1,0 +1,97 @@
+Write the Backup Script
+
+
+
+import mysql.connector
+import subprocess
+import boto3
+
+# RDS database connection details
+RDS_HOST = 'myendpoint'
+RDS_USER = 'mahendra'
+RDS_PASSWORD = 'secret'
+RDS_DB_NAME = 'test'
+
+# AWS credentials and S3 details
+AWS_ACCESS_KEY = 'secret'
+AWS_SECRET_KEY = 'secret'
+AWS_REGION = 'us-east-1'
+S3_BUCKET_NAME = 'testbackupproject'
+BACKUP_FILENAME = 'backup.sql'
+
+# Step 1: Connect to the RDS Instance
+try:
+    connection = mysql.connector.connect(host=RDS_HOST, user=RDS_USER, password=RDS_PASSWORD, database=RDS_DB_NAME)
+    cursor = connection.cursor()
+    print("Connected to the RDS instance successfully!")
+
+    # Step 2: Initiate Database Dump (MySQL)
+    dump_command = f"mysqldump -h {RDS_HOST} -u {RDS_USER} -p{RDS_PASSWORD} {RDS_DB_NAME} > {BACKUP_FILENAME}"
+    subprocess.run(dump_command, shell=True, check=True)
+    print("Database dumped successfully.")
+
+    # Step 3: Upload Backup File to S3
+    s3_client = boto3.client('s3', aws_access_key_id=AWS_ACCESS_KEY, aws_secret_access_key=AWS_SECRET_KEY, region_name=AWS_REGION)
+    with open(BACKUP_FILENAME, 'rb') as data:
+        s3_client.upload_fileobj(data, S3_BUCKET_NAME, BACKUP_FILENAME)
+    print(f"Backup file uploaded to S3 bucket: {S3_BUCKET_NAME}/{BACKUP_FILENAME}")
+
+except Exception as e:
+    print(f"Error: {e}")
+
+finally:
+    # Close the connections
+    if connection.is_connected():
+        cursor.close()
+        connection.close()
+        print("Connections closed.")
+
+
+
+
+  Write the Restore Script
+
+
+
+import boto3
+import mysql.connector
+import subprocess
+
+# AWS credentials and S3 details
+AWS_ACCESS_KEY = 'secret'
+AWS_SECRET_KEY = 'secret'
+AWS_REGION = 'us-east-1'
+S3_BUCKET_NAME = 'testbackupproject'
+BACKUP_FILENAME = 'backup.sql'  # Specify the name of the backup file you want to download and restore
+
+# RDS database connection details
+RDS_HOST = 'secret'
+RDS_USER = 'mahendra'
+RDS_PASSWORD = 'secret'
+RDS_DB_NAME = 'test'
+
+# Step 1: Fetch Backup from S3
+try:
+    s3_client = boto3.client('s3', aws_access_key_id=AWS_ACCESS_KEY, aws_secret_access_key=AWS_SECRET_KEY, region_name=AWS_REGION)
+    s3_client.download_file(S3_BUCKET_NAME, BACKUP_FILENAME, BACKUP_FILENAME)
+    print(f"Backup file '{BACKUP_FILENAME}' downloaded from S3 bucket '{S3_BUCKET_NAME}'.")
+
+except Exception as e:
+    print(f"Error downloading backup from S3: {e}")
+
+# Step 2: Restore to RDS
+try:
+    # Restore the database from the backup file using mysql command
+    restore_command = f"mysql -h {RDS_HOST} -u {RDS_USER} -p{RDS_PASSWORD} {RDS_DB_NAME} < {BACKUP_FILENAME}"
+    subprocess.run(restore_command, shell=True, check=True)
+    print("Database restored successfully.")
+
+except Exception as e:
+    print(f"Error restoring database to RDS: {e}")
+
+finally:
+    # Clean up: remove the downloaded backup file
+    subprocess.run(f"del {BACKUP_FILENAME}", shell=True, check=True)
+    print(f"Backup file '{BACKUP_FILENAME}' removed.")
+
+# Note: Ensure that the AWS credentials and RDS connection details are correct and secure.
